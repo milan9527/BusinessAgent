@@ -39,6 +39,10 @@ interface ChatBody {
   };
 }
 
+interface ConsolidateBody {
+  Params: { agentId: string };
+}
+
 export async function workshopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /equipped — List currently equipped skills in the workshop session
@@ -167,6 +171,21 @@ export async function workshopRoutes(fastify: FastifyInstance): Promise<void> {
         },
         workshopSkills,
       );
+    },
+  );
+
+  /**
+   * POST /consolidate — Consolidate workspace skills created by skill-creator
+   */
+  fastify.post<ConsolidateBody>(
+    '/:agentId/workshop/consolidate',
+    { preHandler: [authenticate] },
+    async (request: FastifyRequest<ConsolidateBody>, reply: FastifyReply) => {
+      const orgId = request.user!.orgId;
+      const { agentId } = request.params;
+
+      const result = await workshopService.consolidateChat(orgId, agentId);
+      return reply.status(200).send({ data: result });
     },
   );
 }

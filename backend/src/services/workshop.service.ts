@@ -11,8 +11,12 @@
 import { skillRepository } from '../repositories/skill.repository.js';
 import { agentRepository } from '../repositories/agent.repository.js';
 import { skillMarketplaceService, type MarketplaceSkillResult } from './skill-marketplace.service.js';
+import { skillService, type CreateSkillInput } from './skill.service.js';
+import { workspaceManager } from './workspace-manager.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { SkillForWorkspace } from './workspace-manager.js';
+import { readdir, readFile, access } from 'fs/promises';
+import { join } from 'path';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -223,6 +227,121 @@ export class WorkshopService {
       description: s.description,
       version: s.version,
     }));
+  }
+
+  /**
+   * Consolidate workshop results into persisted skills.
+   *
+   * Scans the agent's workspace for skill folders created by skill-creator
+   * during the chat session. Any new skills (not builtins, not already in DB)
+   * are persisted and returned so the frontend can equip them.
+   *
+   * Returns `{ created, needsSkillCreator }`:
+   * - `created`: skills that were saved from the workspace
+   * - `needsSkillCreator`: true if no new skills were found (caller should
+   *   trigger skill-creator via chat instead)
+   */
+  async consolidateChat(
+    organizationId: string,
+    agentId: string,
+  ): Promise<{ created: EquippedSkillInfo[]; needsSkillCreator: boolean }> {
+    const agent = await agentRepository.findById(agentId, organizationId);
+    if (!agent) throw AppError.notFound(`Agent ${agentId} not found`);
+
+    // Discover skill folders created by skill-creator.
+    // The skill-creator writes new skills to the workspace root (e.g. workspace/my-skill/),
+    // NOT to .claude/skills/ which is reserved for pre-installed skills.
+    const workspacePath = workspaceManager.getWorkspacePath(agentId);
+    const skillsDir = workspaceManager.getSkillsDir(agentId);
+
+    // Collect candidate directories: workspace root dirs that contain a SKILL.md
+    const diskSkillDirs = new Map<string, string>(); // name -> full path
+    try {
+      const entries = await readdir(workspacePath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        // Skip hidden dirs (.claude, .git, etc.) and known non-skill dirs
+        if (entry.name.startsWith('.')) continue;
+        const skillMdPath = join(workspacePath, entry.name, 'SKILL.md');
+        try {
+          await access(skillMdPath);
+          diskSkillDirs.set(entry.name, join(workspacePath, entry.name));
+        } catch { /* no SKILL.md — not a skill */ }
+      }
+    } catch {
+      return { created: [], needsSkillCreator: true };
+    }
+
+    // Also check .claude/skills/ for any skills created there directly
+    try {
+      await access(skillsDir);
+      const entries = await readdir(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (!diskSkillDirs.has(entry.name)) {
+          diskSkillDirs.set(entry.name, join(skillsDir, entry.name));
+        }
+      }
+    } catch { /* no .claude/skills dir */ }
+
+    const diskSkillNames = Array.from(diskSkillDirs.keys());
+
+    // Determine which are "new" — exclude builtins and already-persisted skills
+    const builtinNames = new Set(['skill-creator', 'app-publisher']);
+    const existingSkills = await skillRepository.findActiveSkills(organizationId);
+    const existingNames = new Set(existingSkills.map(s => s.name));
+
+    // Also exclude skills that were already equipped in the workshop session
+    // (downloaded to the workspace before the chat started — not created by skill-creator)
+    const session = this.sessions.get(this.sessionKey(organizationId, agentId));
+    const sessionSkillIds = session ? Array.from(session.equippedSkillIds) : [];
+    const sessionSkills = sessionSkillIds.length > 0
+      ? await skillRepository.findByIds(organizationId, sessionSkillIds)
+      : [];
+    const preExistingWorkspaceNames = new Set(sessionSkills.map(s => s.name));
+
+    const newSkillNames = diskSkillNames.filter(
+      name => !builtinNames.has(name) && !existingNames.has(name) && !preExistingWorkspaceNames.has(name),
+    );
+
+    if (newSkillNames.length === 0) {
+      return { created: [], needsSkillCreator: true };
+    }
+
+    // Persist each new skill
+    const created: EquippedSkillInfo[] = [];
+    for (const name of newSkillNames) {
+      const skillDir = diskSkillDirs.get(name) ?? join(skillsDir, name);
+
+      // Read SKILL.md for metadata
+      let description: string | null = null;
+      let displayName = name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      try {
+        const content = await readFile(join(skillDir, 'SKILL.md'), 'utf-8');
+        const descMatch = content.match(/^description:\s*(.+)$/m);
+        if (descMatch?.[1]) description = descMatch[1].trim();
+        const nameMatch = content.match(/^name:\s*(.+)$/m);
+        if (nameMatch?.[1]) displayName = nameMatch[1].trim().replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      } catch { /* no SKILL.md or parse error */ }
+
+      const skill = await skillService.createSkill(organizationId, {
+        name,
+        display_name: displayName,
+        description: description || `Skill created in workshop for ${agent.display_name || agent.name}`,
+        tags: ['workshop', 'consolidated'],
+        metadata: { source: 'workshop-consolidation', agentId, localPath: skillDir },
+      });
+
+      created.push({
+        id: skill.id,
+        name: skill.name,
+        displayName: skill.display_name,
+        description: skill.description,
+        version: skill.version,
+      });
+    }
+
+    return { created, needsSkillCreator: false };
   }
 }
 

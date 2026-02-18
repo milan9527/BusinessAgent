@@ -10,6 +10,7 @@
  */
 
 import { Bot } from 'lucide-react';
+import { useState } from 'react';
 import type { ContentBlock } from '@/services/chatStreamService';
 import { TextContentBlock } from './TextContentBlock';
 import { ToolUseBlock } from './ToolUseBlock';
@@ -22,6 +23,10 @@ interface ChatMessageProps {
   model?: string;
   /** Whether this message is currently being streamed. */
   isStreaming?: boolean;
+  /** Sub-agent speaker name — shown instead of default avatar when set. */
+  speakerAgentName?: string;
+  /** Sub-agent speaker avatar URL — shown instead of default icon when set. */
+  speakerAgentAvatar?: string | null;
 }
 
 /**
@@ -43,7 +48,9 @@ function renderContentBlock(block: ContentBlock, index: number, isStreaming: boo
 /**
  * Renders a complete assistant message with an avatar and all content blocks.
  */
-export function ChatMessage({ content, model, isStreaming = false }: ChatMessageProps) {
+export function ChatMessage({ content, model, isStreaming = false, speakerAgentName, speakerAgentAvatar }: ChatMessageProps) {
+  const [avatarError, setAvatarError] = useState(false);
+
   if (content.length === 0) {
     return null;
   }
@@ -59,16 +66,30 @@ export function ChatMessage({ content, model, isStreaming = false }: ChatMessage
   // Only mark the last tool_use as streaming if there's no tool_result after it
   const hasResultAfterLastTool = lastToolUseIdx >= 0 && content.slice(lastToolUseIdx + 1).some(b => b.type === 'tool_result');
 
+  const showImage = speakerAgentAvatar && !avatarError;
+
   return (
     <div className="flex gap-3" data-testid="chat-message">
       {/* Avatar */}
-      <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
-        <Bot className="w-4 h-4 text-white" />
-      </div>
+      {showImage ? (
+        <img
+          src={speakerAgentAvatar}
+          alt={speakerAgentName ?? 'Agent'}
+          className="w-8 h-8 rounded-full flex-shrink-0 object-cover"
+          onError={() => setAvatarError(true)}
+        />
+      ) : (
+        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold select-none">
+          {speakerAgentName ? speakerAgentName.charAt(0).toUpperCase() : <Bot className="w-4 h-4 text-white" />}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-2">
-        {model && (
+        {speakerAgentName && (
+          <span className="text-xs font-medium text-purple-400">{speakerAgentName}</span>
+        )}
+        {model && !speakerAgentName && (
           <span className="text-xs text-gray-500 font-mono">{model}</span>
         )}
         {content.map((block, idx) =>

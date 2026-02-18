@@ -11,6 +11,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { access } from 'fs/promises';
 import { join } from 'path';
 import { createServer } from 'net';
+import { findAppRoot } from './app-finder.js';
 
 interface DevServer {
   process: ChildProcess;
@@ -42,26 +43,33 @@ class DevServerManager {
       return existing.port;
     }
 
-    // Check if package.json exists
-    const pkgPath = join(workspacePath, 'package.json');
+    // Intelligently find the actual app root within the workspace.
+    // This handles cases where the agent created the app in a nested subfolder
+    // (e.g. todo-app/todo-app/) due to path confusion from guardrails.
+    const appCandidate = await findAppRoot(workspacePath);
+    const appRoot = appCandidate.path;
+    console.log(`[DevServerManager] App root for session ${sessionId}: ${appCandidate.relativePath} (score: ${appCandidate.score}, reason: ${appCandidate.reason})`);
+
+    // Check if package.json exists in the resolved app root
+    const pkgPath = join(appRoot, 'package.json');
     try {
       await access(pkgPath);
     } catch {
-      throw new Error('No package.json found in workspace');
+      throw new Error(`No package.json found in workspace (searched: ${appCandidate.relativePath})`);
     }
 
     // npm install if needed
-    const nmPath = join(workspacePath, 'node_modules');
+    const nmPath = join(appRoot, 'node_modules');
     try {
       await access(nmPath);
     } catch {
-      await this.runCommand('npm', ['install'], workspacePath);
+      await this.runCommand('npm', ['install'], appRoot);
     }
 
     const port = await this.findFreePort();
 
     const proc = spawn('npx', ['vite', '--port', String(port), '--host', '0.0.0.0', '--strictPort'], {
-      cwd: workspacePath,
+      cwd: appRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, BROWSER: 'none' },
     });

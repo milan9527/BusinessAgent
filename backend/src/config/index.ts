@@ -33,6 +33,10 @@ const envSchema = z.object({
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
 
+  // Cognito-specific credentials (if the user pool is in a different AWS account)
+  COGNITO_AWS_ACCESS_KEY_ID: z.string().optional(),
+  COGNITO_AWS_SECRET_ACCESS_KEY: z.string().optional(),
+
   // S3
   S3_BUCKET_NAME: z.string().default('super-agent-files'),
   S3_PRESIGNED_URL_EXPIRES: z.string().default('3600').transform(Number),
@@ -106,6 +110,12 @@ export const config = {
     region: env.AWS_REGION,
     accessKeyId: env.AWS_ACCESS_KEY_ID,
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+  },
+
+  cognitoCredentials: {
+    // Falls back to general AWS credentials if not separately configured
+    accessKeyId: env.COGNITO_AWS_ACCESS_KEY_ID ?? env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: env.COGNITO_AWS_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY,
   },
 
   s3: {

@@ -15,13 +15,10 @@ import {
   Play,
   Square,
   Save,
-  Layout,
   History,
-  Variable,
   Trash2,
   Webhook,
   Calendar,
-  Key,
   Sparkles,
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
@@ -30,19 +27,16 @@ import { useBusinessScopes } from '@/services/useBusinessScopes';
 import { useAgents } from '@/services/useAgents';
 import { Canvas } from '@/components/canvas';
 import { NodeEditorPanel } from '@/components/canvas/NodeEditorPanel';
-import { VariablesPanel } from '@/components/canvas/VariablesPanel';
 import { WorkflowCopilot } from '@/components/WorkflowCopilot';
 import type { WorkflowCopilotHandle } from '@/components/WorkflowCopilot';
 import { WorkflowImporter } from '@/components/WorkflowImporter';
 import { WebhookPanel } from '@/components/WebhookPanel';
 import { SchedulePanel } from '@/components/SchedulePanel';
-import { ApiKeysPanel } from '@/components/ApiKeysPanel';
 import type { CanvasNode, CanvasEdge, CanvasData, CanvasNodeType } from '@/types/canvas';
 import type { NodeExecutionState } from '@/services/useWorkflowExecution';
 import type { Workflow as WorkflowType, WorkflowImportResult } from '@/types';
 import type { WorkflowVariable } from '@/types/workflow-plan';
 import { createCanvasNode } from '@/lib/canvas/nodes';
-import { autoLayout } from '@/lib/canvas/layout';
 import { getAuthToken } from '@/services/api/restClient';
 
 // Default colors for business scope tabs
@@ -206,13 +200,13 @@ export function WorkflowEditor() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
-  const [showVariablesPanel, setShowVariablesPanel] = useState(false);
+
   const [showWebhookPanel, setShowWebhookPanel] = useState(false);
   const [showSchedulePanel, setShowSchedulePanel] = useState(false);
-  const [showApiKeysPanel, setShowApiKeysPanel] = useState(false);
+
   const [showCopilotPanel, setShowCopilotPanel] = useState(true);
   const [copilotSuccess, setCopilotSuccess] = useState<string | null>(null);
-  const [workflowVariables, setWorkflowVariables] = useState<WorkflowVariable[]>([]);
+
   
   const copilotRef = useRef<WorkflowCopilotHandle>(null);
   const isLoading = workflowsLoading || scopesLoading;
@@ -397,16 +391,6 @@ export function WorkflowEditor() {
     setIsDirty(false);
   }, [selectedWorkflow, canvasData, isDirty, updateWorkflow]);
 
-  // Handle auto-layout
-  const handleAutoLayout = useCallback(() => {
-    const result = autoLayout(canvasData.nodes as any, canvasData.edges as any);
-    setCanvasData({
-      nodes: result.nodes as CanvasNode[],
-      edges: canvasData.edges,
-    });
-    setIsDirty(true);
-  }, [canvasData]);
-
   // Handle run workflow — stream V2 execution into copilot chat
   const [isRunningV2, setIsRunningV2] = useState(false);
   const [v2NodeStates, setV2NodeStates] = useState<Map<string, NodeExecutionState>>(new Map());
@@ -433,12 +417,16 @@ export function WorkflowEditor() {
         },
         body: JSON.stringify({
           businessScopeId: activeScopeId,
-          variables: workflowVariables.map(v => ({
-            variableId: v.variableId,
-            name: v.name,
-            value: Array.isArray(v.value) ? v.value.join(', ') : '',
-            description: v.description,
-          })),
+          variables: (() => {
+            const startNode = canvasData.nodes.find(n => n.type === 'start');
+            const meta = startNode?.data?.metadata as { inputVariables?: Array<{ variableId: string; name: string; value: unknown[]; description?: string }> } | undefined;
+            return (meta?.inputVariables || []).map(v => ({
+              variableId: v.variableId,
+              name: v.name,
+              value: Array.isArray(v.value) ? v.value.map(val => typeof val === 'string' ? val : (val as { text?: string })?.text || '').join(', ') : '',
+              description: v.description,
+            }));
+          })(),
         }),
       });
 
@@ -529,7 +517,7 @@ export function WorkflowEditor() {
     } finally {
       setIsRunningV2(false);
     }
-  }, [selectedWorkflow, isRunningV2, activeScopeId, workflowVariables]);
+  }, [selectedWorkflow, isRunningV2, activeScopeId, canvasData]);
 
   // Handle abort workflow
   const handleAbortWorkflow = useCallback(async () => {
@@ -557,11 +545,8 @@ export function WorkflowEditor() {
   }, [selectedWorkflow, applyNaturalLanguageChanges, t]);
 
   // Handle workflow generation from copilot
-  const handleGenerateWorkflow = useCallback((newCanvasData: CanvasData, title: string, variables?: WorkflowVariable[]) => {
+  const handleGenerateWorkflow = useCallback((newCanvasData: CanvasData, title: string, _variables?: WorkflowVariable[]) => {
     setCanvasData(newCanvasData);
-    if (variables && variables.length > 0) {
-      setWorkflowVariables(variables);
-    }
     setIsDirty(true);
     setCopilotSuccess(`Generated workflow: ${title}`);
     setTimeout(() => setCopilotSuccess(null), 3000);
@@ -793,17 +778,7 @@ export function WorkflowEditor() {
                   >
                     <History className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => setShowVariablesPanel(!showVariablesPanel)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm ${
-                      showVariablesPanel 
-                        ? 'bg-purple-600/20 text-purple-400' 
-                        : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                    }`}
-                    title="Workflow Variables"
-                  >
-                    <Variable className="w-4 h-4" />
-                  </button>
+
                   <button
                     onClick={() => setShowWebhookPanel(!showWebhookPanel)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm ${
@@ -826,17 +801,7 @@ export function WorkflowEditor() {
                   >
                     <Calendar className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => setShowApiKeysPanel(!showApiKeysPanel)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm ${
-                      showApiKeysPanel 
-                        ? 'bg-yellow-600/20 text-yellow-400' 
-                        : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                    }`}
-                    title="API Keys"
-                  >
-                    <Key className="w-4 h-4" />
-                  </button>
+
                   <button
                     onClick={() => setShowCopilotPanel(!showCopilotPanel)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors text-sm ${
@@ -848,13 +813,7 @@ export function WorkflowEditor() {
                   >
                     <Sparkles className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={handleAutoLayout}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors text-sm"
-                    title="Auto Layout"
-                  >
-                    <Layout className="w-4 h-4" />
-                  </button>
+
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-red-600/20 hover:text-red-400 text-gray-300 rounded-md transition-colors text-sm"
@@ -1001,18 +960,6 @@ export function WorkflowEditor() {
                   </div>
                 )}
 
-                {/* Variables Panel */}
-                {showVariablesPanel && (
-                  <VariablesPanel
-                    variables={workflowVariables}
-                    onChange={(vars) => {
-                      setWorkflowVariables(vars);
-                      setIsDirty(true);
-                    }}
-                    onClose={() => setShowVariablesPanel(false)}
-                  />
-                )}
-
                 {/* Webhook Panel */}
                 {showWebhookPanel && selectedWorkflow && (
                   <WebhookPanel
@@ -1026,13 +973,6 @@ export function WorkflowEditor() {
                   <SchedulePanel
                     workflowId={selectedWorkflow.id}
                     onClose={() => setShowSchedulePanel(false)}
-                  />
-                )}
-
-                {/* API Keys Panel */}
-                {showApiKeysPanel && (
-                  <ApiKeysPanel
-                    onClose={() => setShowApiKeysPanel(false)}
                   />
                 )}
 

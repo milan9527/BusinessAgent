@@ -90,6 +90,31 @@ export async function installMarketplaceSkill(installRef: string): Promise<{
 }
 
 /**
+ * Consolidate workspace skills created by skill-creator into persisted skills.
+ * Returns created skills (to equip) or a flag indicating skill-creator should be invoked.
+ */
+export async function consolidateChatToSkill(
+  agentId: string,
+): Promise<{
+  created: Array<{
+    id: string; name: string; displayName: string;
+    description: string | null; version: string;
+  }>;
+  needsSkillCreator: boolean;
+}> {
+  const res = await restClient.post<{ data: {
+    created: Array<{
+      id: string; name: string; displayName: string;
+      description: string | null; version: string;
+    }>;
+    needsSkillCreator: boolean;
+  } }>(
+    `/api/agents/${agentId}/workshop/consolidate`,
+  );
+  return res.data;
+}
+
+/**
  * Stream a workshop chat message via SSE.
  * Returns a reader handle for the SSE stream.
  */

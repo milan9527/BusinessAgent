@@ -75,11 +75,11 @@ class SessionStreamManager {
   /**
    * Update a specific message in a session by ID.
    */
-  updateMessage(sessionId: string, messageId: string, content: string): void {
+  updateMessage(sessionId: string, messageId: string, content: string, speakerAgentName?: string, speakerAgentAvatar?: string | null): void {
     const state = this.sessions.get(sessionId)
     if (!state) return
     state.messages = state.messages.map(m =>
-      m.id === messageId ? { ...m, content } : m
+      m.id === messageId ? { ...m, content, ...(speakerAgentName !== undefined ? { speakerAgentName, speakerAgentAvatar } : {}) } : m
     )
     this.notify()
   }
@@ -132,12 +132,17 @@ class SessionStreamManager {
         onAssistant: (event) => {
           allBlocks.push(...event.content)
           const serialized = JSON.stringify(allBlocks)
-          this.updateMessage(sessionId, aiMessageId, serialized)
+          this.updateMessage(sessionId, aiMessageId, serialized, event.speakerAgentName, event.speakerAgentAvatar)
         },
         onError: (event) => {
           const s = this.sessions.get(sessionId)
           if (s) {
             s.error = event.message || 'Stream error'
+            // If the session/scope was not found (stale localStorage), clear the error
+            // message so the UI can prompt the user to re-select a scope
+            if (event.code === 'HTTP_ERROR' && event.message?.includes('not found')) {
+              s.error = 'Session expired. Please start a new conversation.'
+            }
             this.notify()
           }
         },
@@ -273,7 +278,7 @@ class SessionStreamManager {
                   const parsed = JSON.parse(data)
                   if (parsed.type === 'assistant' && Array.isArray(parsed.content)) {
                     allBlocks.push(...parsed.content)
-                    this.updateMessage(sessionId, aiMessageId, JSON.stringify(allBlocks))
+                    this.updateMessage(sessionId, aiMessageId, JSON.stringify(allBlocks), parsed.speakerAgentName, parsed.speakerAgentAvatar)
                   } else if (parsed.type === 'preview_ready' && parsed.url) {
                     window.dispatchEvent(new CustomEvent('preview-ready', {
                       detail: { url: parsed.url, name: parsed.appName || 'Preview', appId: parsed.appId },

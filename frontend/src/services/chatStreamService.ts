@@ -54,6 +54,8 @@ export interface AssistantEvent {
   type: 'assistant';
   content: ContentBlock[];
   model?: string;
+  speakerAgentName?: string;
+  speakerAgentAvatar?: string | null;
 }
 
 export interface ResultEvent {
@@ -243,6 +245,8 @@ export function parseSSEData(data: string, eventName?: string): ChatStreamEvent 
             type: 'assistant',
             content: Array.isArray(parsed.content) ? parsed.content : [],
             model: parsed.model,
+            speakerAgentName: parsed.speakerAgentName,
+            speakerAgentAvatar: parsed.speakerAgentAvatar,
           } satisfies AssistantEvent;
 
         case 'result':

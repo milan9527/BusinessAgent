@@ -13,6 +13,7 @@ import { prisma } from '../config/database.js';
 import { chatService } from '../services/chat.service.js';
 import { workspaceManager } from '../services/workspace-manager.js';
 import { streamRegistry } from '../services/stream-registry.js';
+import { findAppRoot } from '../services/app-finder.js';
 
 const APPS_STORAGE_DIR = join(config.claude.workspaceBaseDir, '_published_apps');
 
@@ -229,7 +230,8 @@ export async function appsRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // 2. Resolve the folder path within the workspace
-      const resolvedPath = workspaceManager.resolveWorkspaceFilePath(orgId, scopeId, session_id, folder_path);
+      const workspacePath = workspaceManager.getSessionWorkspacePath(orgId, scopeId, session_id);
+      let resolvedPath = workspaceManager.resolveWorkspaceFilePath(orgId, scopeId, session_id, folder_path);
       if (!resolvedPath) {
         return reply.status(400).send({
           error: 'Invalid folder path (path traversal detected)',
@@ -237,14 +239,25 @@ export async function appsRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      // 3. Verify the folder exists
+      // 3. Verify the folder exists — if not, try auto-discovering the app root
+      let folderExists = false;
       try {
         const st = await fsStat(resolvedPath);
-        if (!st.isDirectory()) {
-          return reply.status(400).send({ error: 'Path is not a directory', code: 'NOT_A_DIRECTORY' });
-        }
+        folderExists = st.isDirectory();
       } catch {
-        return reply.status(404).send({ error: `Folder not found: ${folder_path}`, code: 'FOLDER_NOT_FOUND' });
+        // folder_path doesn't exist
+      }
+
+      if (!folderExists) {
+        // Auto-discover: the agent may have created the app in a nested/different folder
+        request.log.warn({ folder_path }, 'Specified folder not found, auto-discovering app root');
+        const candidate = await findAppRoot(workspacePath);
+        if (candidate.score > 0 && candidate.path !== workspacePath) {
+          resolvedPath = candidate.path;
+          request.log.info({ discovered: candidate.relativePath, score: candidate.score }, 'Auto-discovered app root');
+        } else {
+          return reply.status(404).send({ error: `Folder not found: ${folder_path}`, code: 'FOLDER_NOT_FOUND' });
+        }
       }
 
       // 4. Determine entry point — check common locations
@@ -261,6 +274,22 @@ export async function appsRoutes(fastify: FastifyInstance): Promise<void> {
           resolvedEntry = candidate;
           foundEntry = true;
           break;
+        }
+      }
+
+      if (!foundEntry) {
+        // Last resort: auto-discover a better app folder that has an entry point
+        const candidate = await findAppRoot(workspacePath);
+        if (candidate.score > 0 && candidate.path !== resolvedPath) {
+          resolvedPath = candidate.path;
+          request.log.info({ discovered: candidate.relativePath, score: candidate.score }, 'Re-discovered app root for entry point');
+          for (const candidate2 of candidateEntries) {
+            if (existsSync(join(resolvedPath, candidate2))) {
+              resolvedEntry = candidate2;
+              foundEntry = true;
+              break;
+            }
+          }
         }
       }
 

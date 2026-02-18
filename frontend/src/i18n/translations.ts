@@ -818,6 +818,10 @@ export const translations: TranslationData = {
     en: 'Framework Settings',
     cn: '框架设置'
   },
+  'admin.settings': {
+    en: 'Members & Permissions',
+    cn: '成员与权限'
+  },
 
   // Common Actions
   'common.save': {

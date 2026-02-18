@@ -7,6 +7,7 @@ import {
   Code,
   BookOpen,
   Settings,
+  Users,
   X,
 } from 'lucide-react'
 import { useTranslation } from '@/i18n'
@@ -69,6 +70,12 @@ export function AdminMenu({ isOpen, onClose }: AdminMenuProps) {
       icon: <Settings className="w-4 h-4" />,
       labelKey: 'admin.frameworkSettings',
       path: '/config/framework',
+    },
+    {
+      id: 'settings',
+      icon: <Users className="w-4 h-4" />,
+      labelKey: 'admin.settings',
+      path: '/settings',
     },
   ]
 

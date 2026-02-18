@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Server, Plus, Trash2, Loader2, Briefcase,
   Users, Zap, TrendingUp, BarChart3,
@@ -141,6 +141,21 @@ function generateFakeBriefings(agents: Agent[]): TaskBriefing[] {
     agentName: agents[i % agents.length].displayName,
     agentAvatar: agents[i % agents.length].avatar,
   }))
+}
+
+/* ------------------------------------------------------------------ */
+/*  Timestamp formatter                                                */
+/* ------------------------------------------------------------------ */
+function formatTimestamp(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'Yesterday'
+  return `${days} days ago`
 }
 
 /* ------------------------------------------------------------------ */
@@ -326,7 +341,53 @@ export function ScopeProfile({ scope, agents }: ScopeProfileProps) {
     : 0
   const totalSkills = agents.reduce((sum, a) => sum + (a.tools?.length ?? 0), 0)
 
-  const briefings = useMemo(() => generateFakeBriefings(agents), [agents])
+  const [briefings, setBriefings] = useState<TaskBriefing[]>([])
+  const [briefingsLoading, setBriefingsLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadBriefings() {
+      setBriefingsLoading(true)
+      try {
+        const res = await restClient.get<any[]>(
+          `/api/business-scopes/${scope.id}/briefings?limit=8`
+        )
+        if (cancelled) return
+        const iconMap: Record<string, typeof FileText> = {
+          Reporting: FileText, Compliance: Shield, Analytics: TrendingUp,
+          Operations: Zap, Communications: MessageSquare, Knowledge: Database,
+          Procurement: CheckCircle2, Regulatory: AlertCircle, Budgeting: BarChart3,
+          Accounting: Database, Activity: Zap,
+        }
+        const colorMap: Record<string, string> = {
+          completed: 'border-l-emerald-500', flagged: 'border-l-yellow-500',
+          'in-progress': 'border-l-blue-500', escalated: 'border-l-orange-500',
+        }
+        const transformed: TaskBriefing[] = res.map((b: any) => ({
+          id: b.id,
+          title: b.title,
+          summary: b.summary,
+          agentName: b.agent?.display_name || 'System',
+          agentAvatar: b.agent?.avatar,
+          timestamp: formatTimestamp(b.event_time),
+          status: b.status,
+          category: b.category,
+          icon: iconMap[b.category] || FileText,
+          accentColor: colorMap[b.status] || 'border-l-gray-500',
+          tags: b.tags || [],
+        }))
+        setBriefings(transformed)
+      } catch {
+        // Fallback to fake data if API fails
+        setBriefings(generateFakeBriefings(agents))
+      } finally {
+        if (!cancelled) setBriefingsLoading(false)
+      }
+    }
+    loadBriefings()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- agents intentionally excluded to avoid re-fetch on poll
+  }, [scope.id])
 
   return (
     <div className="h-full overflow-y-auto">
@@ -384,7 +445,12 @@ export function ScopeProfile({ scope, agents }: ScopeProfileProps) {
             <span className="text-[10px] text-gray-600 ml-auto">AI-summarized task briefings</span>
           </div>
 
-          {briefings.length === 0 ? (
+          {briefingsLoading ? (
+            <div className="py-12 text-center bg-gray-900 border border-gray-800 rounded-xl">
+              <Loader2 className="w-6 h-6 text-blue-500 animate-spin mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Loading briefings...</p>
+            </div>
+          ) : briefings.length === 0 ? (
             <div className="py-12 text-center bg-gray-900 border border-gray-800 rounded-xl">
               <FileText className="w-8 h-8 text-gray-700 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No task history yet</p>

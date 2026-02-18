@@ -51,6 +51,7 @@ import { webhooksRoutes } from './webhooks.routes.js';
 import { schedulesRoutes } from './schedules.routes.js';
 import { integrationRoutes } from './integrations.routes.js';
 import { appsRoutes } from './apps.routes.js';
+import { appDataRoutes } from './appData.routes.js';
 import { enterpriseSkillsRoutes, enterpriseSkillPublishRoutes } from './enterprise-skills.routes.js';
 import { imChannelAdminRoutes, imWebhookRoutes } from './im.routes.js';
 import { scopeMemoryRoutes } from './scope-memory.routes.js';
@@ -190,6 +191,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   // Published Apps / Marketplace Routes
   await fastify.register(appsRoutes, { prefix: '/api/apps' });
+  await fastify.register(appDataRoutes, { prefix: '/api/apps' });
 
   // ============================================================================
   // Public OpenAPI Routes (API Key Authentication)

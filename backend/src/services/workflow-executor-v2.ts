@@ -1,21 +1,25 @@
 /**
- * Workflow Executor V2 — Unified Agent Execution
+ * Workflow Executor V2 — Unified Agent Execution with Hook-Based Progress
  *
  * Executes an entire workflow as a single Claude Code session.
  * The workflow plan is serialized into a mission brief (CLAUDE.md),
  * and Claude executes all steps within one conversation.
  *
- * Progress is reported via markers: [STEP:task-id:START], [STEP:task-id:COMPLETE], etc.
+ * Progress is reported via an in-process MCP server that provides
+ * workflow_step_start / workflow_step_complete / workflow_step_failed tools.
+ * Claude calls these tools as it works through each step, giving the
+ * frontend deterministic, real-time progress updates.
  */
 
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
-import { claudeAgentService, type AgentConfig, type ConversationEvent } from './claude-agent.service.js';
+import { claudeAgentService, type AgentConfig, type ConversationEvent, type AnyMCPServerConfig } from './claude-agent.service.js';
 import { workspaceManager, type ScopeForWorkspace, type SkillForWorkspace } from './workspace-manager.js';
 import { businessScopeService } from './businessScope.service.js';
 import { skillService } from './skill.service.js';
 import { agentRepository } from '../repositories/agent.repository.js';
 import { skillRepository } from '../repositories/skill.repository.js';
+import { createWorkflowProgressServer } from './workflow-progress-mcp.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,7 +104,7 @@ function serializePlanToMissionBrief(
   lines.push('## Execution Plan', '');
 
   for (let i = 0; i < plan.nodes.length; i++) {
-    const node = plan.nodes[i];
+    const node = plan.nodes[i]!;
     const stepNum = i + 1;
     const typeLabel = `[${node.type}]`;
 
@@ -126,48 +130,20 @@ function serializePlanToMissionBrief(
     lines.push('');
   }
 
-  // Progress reporting instructions
-  lines.push('## Progress Reporting', '');
-  lines.push('You MUST output these markers as you work through each step:');
-  lines.push('- Before starting a step: `[STEP:task-id:START]`');
-  lines.push('- After completing a step: `[STEP:task-id:COMPLETE]`');
-  lines.push('- If a step fails: `[STEP:task-id:FAILED:reason]`');
+  // Progress reporting instructions — use MCP tools instead of text markers
+  lines.push('## Progress Reporting (CRITICAL)', '');
+  lines.push('You have access to three workflow progress tools. You MUST call them as you work:');
+  lines.push('');
+  lines.push('1. **Before starting each step**: call `workflow_step_start` with the task ID');
+  lines.push('2. **After completing each step**: call `workflow_step_complete` with the task ID');
+  lines.push('3. **If a step fails**: call `workflow_step_failed` with the task ID and reason');
+  lines.push('');
+  lines.push('The task IDs for each step are listed above (e.g. the ID after "Step N:"). Use the EXACT task ID.');
   lines.push('');
   lines.push('Execute the steps in dependency order. Steps with no dependencies can be done first.');
   lines.push('Steps that share the same dependencies can be done in any order.');
 
   return lines.join('\n');
-}
-
-// ---------------------------------------------------------------------------
-// Progress Parser
-// ---------------------------------------------------------------------------
-
-// (regex is now inline in parseProgressMarkers)
-
-function parseProgressMarkers(text: string, nodeTitleMap?: Map<string, string>): WorkflowProgressEvent[] {
-  const events: WorkflowProgressEvent[] = [];
-  let match;
-
-  // Reset regex lastIndex for each call
-  const regex = /\[STEP:([a-zA-Z0-9_-]+):(START|COMPLETE|FAILED)(?::(.+?))?\]/g;
-
-  while ((match = regex.exec(text)) !== null) {
-    const taskId = match[1];
-    const status = match[2];
-    const reason = match[3];
-    const taskTitle = nodeTitleMap?.get(taskId);
-
-    if (status === 'START') {
-      events.push({ type: 'step_start', taskId, taskTitle });
-    } else if (status === 'COMPLETE') {
-      events.push({ type: 'step_complete', taskId, taskTitle });
-    } else if (status === 'FAILED') {
-      events.push({ type: 'step_failed', taskId, taskTitle, message: reason });
-    }
-  }
-
-  return events;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +154,10 @@ export class WorkflowExecutorV2 {
   /**
    * Execute a workflow plan as a single Claude session.
    * Yields progress events that can be forwarded as SSE to the frontend.
+   *
+   * Progress tracking uses an in-process MCP server that gives Claude
+   * explicit tools to report step start/complete/failed. This is far more
+   * reliable than parsing text markers from Claude's output.
    */
   async *execute(
     plan: WorkflowV2Plan,
@@ -186,7 +166,7 @@ export class WorkflowExecutorV2 {
     userId: string,
   ): AsyncGenerator<WorkflowProgressEvent> {
     // 1. Load scope data
-    const scope = await businessScopeService.getBusinessScope(scopeId, organizationId);
+    const scope = await businessScopeService.getBusinessScopeById(scopeId, organizationId);
     if (!scope) {
       yield { type: 'error', message: 'Business scope not found' };
       return;
@@ -245,15 +225,29 @@ export class WorkflowExecutorV2 {
         skillNames: agentSkillsMap.get(a.id) || [],
       })),
       skills: Array.from(skillMap.values()),
-      mcpServers: [], // Workflow executions don't use scope MCP servers
-      plugins: [],   // Workflow executions don't use scope plugins
+      mcpServers: [],
+      plugins: [],
     };
 
     const { workspacePath } = await workspaceManager.ensureSessionWorkspace(
       organizationId, sessionId, scopeForWorkspace, null,
     );
 
-    // 6. Write mission brief as CLAUDE.md (overwrite the default scope one)
+    // 6. Build node title map
+    const nodeTitleMap = new Map<string, string>();
+    for (const node of plan.nodes) {
+      nodeTitleMap.set(node.id, node.title);
+    }
+
+    // 7. Create in-process MCP server for progress reporting
+    //    Events from tool calls are pushed into a queue that the generator drains.
+    const eventQueue: WorkflowProgressEvent[] = [];
+    const progressServer = await createWorkflowProgressServer(
+      nodeTitleMap,
+      (event) => { eventQueue.push(event); },
+    );
+
+    // 8. Write mission brief as CLAUDE.md
     const missionBrief = serializePlanToMissionBrief(
       plan,
       agents.map(a => ({ id: a.id, name: a.name, displayName: a.display_name, role: a.role })),
@@ -261,7 +255,7 @@ export class WorkflowExecutorV2 {
     );
     await writeFile(join(workspacePath, 'CLAUDE.md'), missionBrief, 'utf-8');
 
-    // 7. Run single Claude session
+    // 9. Run single Claude session with the progress MCP server attached
     const agentConfig: AgentConfig = {
       id: `workflow-v2-${sessionId}`,
       name: 'workflow-executor',
@@ -272,36 +266,35 @@ export class WorkflowExecutorV2 {
       mcpServerIds: [],
     };
 
-    // Build node title map for enriching progress events
-    const nodeTitleMap = new Map<string, string>();
-    for (const node of plan.nodes) {
-      nodeTitleMap.set(node.id, node.title);
-    }
+    // Build MCP servers map: include the in-process progress server
+    const mcpServers: Record<string, AnyMCPServerConfig> = {
+      'workflow-progress': progressServer as unknown as AnyMCPServerConfig,
+    };
 
     try {
       const generator = claudeAgentService.runConversation(
         {
           agentId: agentConfig.id,
-          message: 'Execute the workflow defined in CLAUDE.md. Follow the execution plan step by step, reporting progress with [STEP:task-id:STATUS] markers.',
+          message: 'Execute the workflow defined in CLAUDE.md. Follow the execution plan step by step. Use the workflow_step_start, workflow_step_complete, and workflow_step_failed tools to report your progress on each step.',
           organizationId,
           userId,
+          workspacePath,
         },
         agentConfig,
         Array.from(skillMap.values()),
+        undefined, // pluginPaths
+        mcpServers,
       );
 
       for await (const event of generator) {
-        // Extract text content from the event
+        // Drain any progress events that accumulated from MCP tool calls
+        while (eventQueue.length > 0) {
+          yield eventQueue.shift()!;
+        }
+
+        // Extract text content for log events
         const textContent = this.extractText(event);
-
         if (textContent) {
-          // Parse progress markers
-          const progressEvents = parseProgressMarkers(textContent, nodeTitleMap);
-          for (const pe of progressEvents) {
-            yield pe;
-          }
-
-          // Also yield raw log
           yield { type: 'log', content: textContent };
         }
 
@@ -312,6 +305,11 @@ export class WorkflowExecutorV2 {
             message: (event as ConversationEvent & { message?: string }).message || 'Execution error',
           };
         }
+      }
+
+      // Drain any remaining progress events
+      while (eventQueue.length > 0) {
+        yield eventQueue.shift()!;
       }
 
       yield { type: 'done' };
@@ -329,7 +327,7 @@ export class WorkflowExecutorV2 {
       if (Array.isArray(content)) {
         return content
           .filter((b: { type: string; text?: string }) => b.type === 'text' && b.text)
-          .map((b: { text: string }) => b.text)
+          .map((b: { type: string; text?: string }) => b.text ?? '')
           .join('');
       }
       if (typeof content === 'string') return content;

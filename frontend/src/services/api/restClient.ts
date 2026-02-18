@@ -185,7 +185,8 @@ export const restClient = {
  * Check if REST API is configured and available
  */
 export function isRestApiConfigured(): boolean {
-  return Boolean(API_BASE_URL);
+  // Empty string means "use relative URLs via Vite proxy" — still configured
+  return true;
 }
 
 /**

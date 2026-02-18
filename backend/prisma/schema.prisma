@@ -47,6 +47,7 @@ model organizations {
   im_channel_bindings        im_channel_bindings[]
   scope_memories             scope_memories[]
   scope_briefings            scope_briefings[]
+  app_data                   app_data[]
   @@index([slug])
   @@index([plan_type])
   @@index([created_at(sort: Desc)])
@@ -622,6 +623,7 @@ model schedule_execution_records {
   status          String    @default("scheduled") @db.VarChar(50)
   error_message   String?
   retry_count     Int       @default(0)
+  logs            Json      @default("[]")
   created_at      DateTime  @default(now()) @db.Timestamptz
 
   organization organizations        @relation(fields: [organization_id], references: [id], onDelete: Cascade)
@@ -710,6 +712,7 @@ model published_apps {
   usage_events   app_usage_events[]
   ratings        app_ratings[]
   versions       app_versions[]
+  app_data       app_data[]
 
   @@index([org_id])
   @@index([status])
@@ -935,4 +938,25 @@ model scope_briefings {
   @@index([business_scope_id, importance(sort: Desc)])
   @@index([business_scope_id, is_read])
   @@index([source_type, source_id])
+}
+
+// ============================================================================
+// App Data — Per-app JSONB data storage for published mini-SaaS apps
+// ============================================================================
+model app_data {
+  id              String   @id @default(uuid()) @db.Uuid
+  app_id          String   @db.Uuid
+  org_id          String   @db.Uuid
+  collection      String   @db.VarChar(100)
+  data            Json
+  created_by      String?  @db.Uuid
+  created_at      DateTime @default(now()) @db.Timestamptz
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  app          published_apps @relation(fields: [app_id], references: [id], onDelete: Cascade)
+  organization organizations  @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@index([app_id, collection])
+  @@index([org_id])
+  @@index([created_at(sort: Desc)])
 }

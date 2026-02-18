@@ -117,7 +117,12 @@ function parseSkillsFindOutput(stdout: string): MarketplaceSkillResult[] {
     if (line.startsWith('Install ')) continue;
 
     const owner = refMatch[1]!;
-    const rawSkillName = refMatch[2]?.trim();
+    // Strip trailing star/rating info (e.g. "⭐ 42", "★ 123", "⭐42")
+    // and install count info (e.g. "141.9K installs", "3.9K installs", "999 installs")
+    const rawSkillName = refMatch[2]
+      ?.replace(/\s*[⭐★☆✩✪✫✬✭✮✯]\s*\d+\s*$/, '')
+      .replace(/\s+\d+\.?\d*[KMBkmb]?\s*installs?\s*$/i, '')
+      .trim() || undefined;
     // For installRef, convert spaces to hyphens (the actual install ref format)
     const skillSlug = rawSkillName ? rawSkillName.replace(/\s+/g, '-') : (owner.split('/')[1] || owner);
     const installRef = rawSkillName ? `${owner}@${skillSlug}` : owner;

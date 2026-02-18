@@ -13,13 +13,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Send, Loader2, Package, Search, Plus, X, Check,
   Download, ExternalLink, FileText, ChevronLeft, Save, Zap,
-  AlertCircle, Bot,
+  AlertCircle, Bot, BookOpen,
 } from 'lucide-react';
 import { useToast } from '@/components';
 import { restClient } from '@/services/api/restClient';
 import {
   getEquippedSkills, equipSkill, unequipSkill, getInstalledSkills,
   saveWorkshopSkills, installMarketplaceSkill, streamWorkshopChat,
+  consolidateChatToSkill,
   type EquippedSkill,
 } from '@/services/workshopService';
 
@@ -165,6 +166,12 @@ export function SkillWorkshop() {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [installingRef, setInstallingRef] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Consolidation state
+  const [isConsolidating, setIsConsolidating] = useState(false);
+  const [consolidatedSkills, setConsolidatedSkills] = useState<Array<{
+    id: string; name: string; displayName: string; description: string | null;
+  }>>([]);
 
   // -------------------------------------------------------------------------
   // Load agent info and equipped skills on mount
@@ -401,6 +408,45 @@ export function SkillWorkshop() {
   }, [agentId, showSuccess, showError]);
 
   // -------------------------------------------------------------------------
+  // Consolidate chat into skill
+  // -------------------------------------------------------------------------
+  const handleConsolidate = useCallback(async () => {
+    if (!agentId || messages.length === 0) return;
+    setIsConsolidating(true);
+    try {
+      const result = await consolidateChatToSkill(agentId);
+      if (result.needsSkillCreator) {
+        // No skill-creator output found — trigger skill-creator via chat
+        setInput('Based on our conversation so far, please use the skill-creator to create a reusable skill that captures the key procedures we discussed.');
+        showSuccess('Skill Creator', 'No new skills found in workspace. Sending a message to invoke skill-creator — click Send, then Consolidate again after it finishes.');
+      } else {
+        setConsolidatedSkills(result.created);
+        const names = result.created.map(s => s.displayName).join(', ');
+        showSuccess('Skills Found', `${result.created.length} skill(s) ready to equip: ${names}`);
+      }
+    } catch (err) {
+      showError('Consolidation Failed', (err as Error).message);
+    } finally {
+      setIsConsolidating(false);
+    }
+  }, [agentId, messages, showSuccess, showError]);
+
+  const handleEquipConsolidated = useCallback(async (skillId: string) => {
+    if (!agentId) return;
+    setEquippingId(skillId);
+    try {
+      const skill = await equipSkill(agentId, skillId);
+      setEquippedSkills(prev => [...prev.filter(s => s.id !== skill.id), skill]);
+      setConsolidatedSkills(prev => prev.filter(s => s.id !== skillId));
+      showSuccess('Skill Equipped', `"${skill.displayName}" equipped to agent`);
+    } catch (err) {
+      showError('Equip Failed', (err as Error).message);
+    } finally {
+      setEquippingId(null);
+    }
+  }, [agentId, showSuccess, showError]);
+
+  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
   return (
@@ -457,13 +503,44 @@ export function SkillWorkshop() {
 
           {/* Input */}
           <div className="border-t border-gray-800 p-3">
+            {/* Consolidated skills cards */}
+            {consolidatedSkills.length > 0 && (
+              <div className="mb-3 space-y-1.5">
+                {consolidatedSkills.map(skill => (
+                  <div key={skill.id} className="p-2.5 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-green-300 truncate block">{skill.displayName}</span>
+                        {skill.description && (
+                          <span className="text-xs text-gray-400 block truncate">{skill.description}</span>
+                        )}
+                      </div>
+                      <button onClick={() => handleEquipConsolidated(skill.id)} disabled={equippingId === skill.id}
+                        className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white rounded-md transition-colors flex items-center gap-1 flex-shrink-0">
+                        {equippingId === skill.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                        Equip
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2">
+              {messages.length >= 2 && (
+                <button onClick={handleConsolidate} disabled={isConsolidating || isSending}
+                  title="Consolidate chat into a skill"
+                  className="px-3 py-2.5 bg-yellow-600/20 hover:bg-yellow-600/30 disabled:bg-gray-800 disabled:text-gray-600 text-yellow-400 rounded-lg transition-colors flex items-center gap-1.5 text-xs flex-shrink-0">
+                  {isConsolidating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookOpen className="w-3.5 h-3.5" />}
+                  Consolidate
+                </button>
+              )}
               <input
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                placeholder="Type a message to test the agent..."
+                placeholder="Use skill-creator to create a skill. I need this skill to..."
                 disabled={isSending}
                 className="flex-1 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors text-sm"
               />

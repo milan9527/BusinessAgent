@@ -62,6 +62,19 @@ export interface MCPServerSDKConfig {
   env?: Record<string, string>;
 }
 
+/**
+ * In-process SDK MCP server config (created via createSdkMcpServer).
+ * The `instance` property holds the live McpServer object.
+ */
+export interface MCPServerInProcessConfig {
+  type: 'sdk';
+  name: string;
+  instance: unknown; // McpServer instance from the SDK
+}
+
+/** Union of all MCP server config types the service accepts. */
+export type AnyMCPServerConfig = MCPServerSDKConfig | MCPServerInProcessConfig;
+
 export interface ClaudeCodeOptions {
   systemPrompt?: string | { type: 'preset'; preset: 'claude_code'; append?: string };
   allowedTools?: string[];
@@ -71,7 +84,7 @@ export interface ClaudeCodeOptions {
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
   allowDangerouslySkipPermissions?: boolean;
   hooks?: Partial<Record<string, SDKHookCallbackMatcher[]>>;
-  mcpServers?: Record<string, MCPServerSDKConfig>;
+  mcpServers?: Record<string, AnyMCPServerConfig>;
   abortController?: AbortController;
   maxTurns?: number;
   pathToClaudeCodeExecutable?: string;
@@ -176,6 +189,9 @@ export interface ConversationEvent {
   appId?: string;
   url?: string;
   appName?: string;
+  /** Sub-agent speaker identity — set when the message originates from a sub-agent */
+  speakerAgentName?: string;
+  speakerAgentAvatar?: string | null;
 }
 
 export interface MCPServerRecord {
@@ -295,7 +311,7 @@ export class ClaudeAgentService {
     agentConfig: AgentConfig,
     skills: SkillForWorkspace[],
     pluginPaths?: string[],
-    mcpServers?: Record<string, MCPServerSDKConfig>,
+    mcpServers?: Record<string, AnyMCPServerConfig>,
   ): AsyncGenerator<ConversationEvent> {
     let sessionId: string | undefined;
     const abortController = new AbortController();
@@ -341,7 +357,7 @@ export class ClaudeAgentService {
 
   buildOptions(
     agentConfig: AgentConfig, workspacePath: string, skillNames: string[],
-    mcpServers: Record<string, MCPServerSDKConfig>, resumeSessionId?: string, abortController?: AbortController, userId?: string,
+    mcpServers: Record<string, AnyMCPServerConfig>, resumeSessionId?: string, abortController?: AbortController, userId?: string,
     pluginPaths?: string[],
   ): ClaudeCodeOptions {
     let model = config.claude.model;

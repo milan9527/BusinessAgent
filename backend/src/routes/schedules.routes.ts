@@ -422,6 +422,7 @@ export async function schedulesRoutes(fastify: FastifyInstance): Promise<void> {
             status: r.status,
             errorMessage: r.errorMessage,
             retryCount: r.retryCount,
+            logs: (r as any).logs || [],
           })),
           pagination: {
             page: pagination.page,

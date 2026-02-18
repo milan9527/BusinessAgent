@@ -4,10 +4,45 @@
  */
 
 import { prisma } from '../config/database.js';
-import { workflowExecutionService } from './workflow-execution.service.js';
 import { workflowRepository } from '../repositories/workflow.repository.js';
-import { workflowQueueService } from './workflow-queue.service.js';
 import cronParser from 'cron-parser';
+import { workflowExecutorV2, type WorkflowV2Plan } from './workflow-executor-v2.js';
+
+/**
+ * Build a WorkflowV2Plan from stored workflow data, matching the execute-v2 route.
+ */
+function buildV2Plan(
+  workflow: { name: string; nodes: any; connections: any },
+  variables: any[],
+): WorkflowV2Plan {
+  const nodes = (workflow.nodes || []) as Array<{
+    id: string; title?: string; label?: string; type: string; prompt?: string;
+    dependentTasks?: string[]; agentId?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+
+  return {
+    title: workflow.name,
+    nodes: nodes.map(n => ({
+      id: n.id,
+      title: n.title || n.label || n.id,
+      type: (n.type as 'agent' | 'action' | 'condition' | 'document' | 'codeArtifact') || 'agent',
+      prompt: n.prompt || (n.metadata?.prompt as string) || n.title || n.label || n.id,
+      dependentTasks: n.dependentTasks || (n.metadata?.dependentTasks as string[]),
+      agentId: n.agentId || (n.metadata?.agentId as string),
+    })),
+    edges: ((workflow.connections || []) as Array<{ source?: string; target?: string; from?: string; to?: string }>).map(c => ({
+      source: c.source || c.from || '',
+      target: c.target || c.to || '',
+    })),
+    variables: (variables || []).map((v: any) => ({
+      variableId: v.variableId || v.variable_id || '',
+      name: v.name || '',
+      value: Array.isArray(v.value) ? v.value.join(', ') : (v.value || ''),
+      description: v.description || '',
+    })),
+  };
+}
 
 export interface ScheduleConfig {
   id: string;
@@ -36,6 +71,7 @@ export interface ScheduleExecutionRecord {
   status: string;
   errorMessage: string | null;
   retryCount: number;
+  logs: any[];
 }
 
 class ScheduleService {
@@ -246,29 +282,21 @@ class ScheduleService {
       },
     });
 
-    // Start execution
-    const executionId = await workflowExecutionService.initializeWorkflowExecution(
-      {
-        id: 'system',
-        organizationId,
-      },
-      schedule.workflow_id,
-      {
-        canvasData: {
-          nodes: workflow.nodes as any[],
-          edges: workflow.connections as any[],
-        },
-        variables: schedule.variables as any[],
-        triggerType: 'schedule',
-        triggerId: scheduleId,
-      }
-    );
+    // Build V2 plan (same as the manual Run button's execute-v2 route)
+    const plan = buildV2Plan(workflow, schedule.variables as any[]);
+    const scopeId = (workflow as any).business_scope_id;
 
-    // Update record with execution ID
-    await prisma.schedule_execution_records.update({
-      where: { id: record.id },
-      data: { execution_id: executionId },
-    });
+    if (!scopeId) {
+      await prisma.schedule_execution_records.update({
+        where: { id: record.id },
+        data: { status: 'failed', error_message: 'Workflow has no business scope', completed_at: new Date() },
+      });
+      throw new Error('Workflow has no business scope assigned');
+    }
+
+    // Execute asynchronously using V2 executor (same agentic path as manual Run)
+    this.runV2Execution(plan, organizationId, scopeId, record.id, scheduleId)
+      .catch(err => console.error(`[SCHEDULE] V2 execution error for schedule ${scheduleId}:`, err));
 
     // Update schedule stats
     await prisma.workflow_schedules.update({
@@ -279,7 +307,105 @@ class ScheduleService {
       },
     });
 
-    return { executionId, triggeredAt };
+    return { executionId: record.id, triggeredAt };
+  }
+
+  /**
+   * Run V2 execution and update the schedule record on completion/failure.
+   */
+  private async runV2Execution(
+    plan: WorkflowV2Plan,
+    organizationId: string,
+    scopeId: string,
+    recordId: string,
+    scheduleId: string,
+  ): Promise<void> {
+    console.log(`[SCHEDULE] Starting V2 execution for schedule=${scheduleId} record=${recordId} scope=${scopeId}`);
+    console.log(`[SCHEDULE] Plan: title="${plan.title}" nodes=${plan.nodes.length} edges=${plan.edges.length}`);
+
+    const logs: Array<{ type: string; content?: string; taskId?: string; taskTitle?: string; timestamp: string }> = [];
+    const addLog = (entry: typeof logs[0]) => {
+      logs.push(entry);
+      // Persist logs periodically (every 5 events) to allow live viewing
+      if (logs.length % 5 === 0) {
+        prisma.schedule_execution_records.update({
+          where: { id: recordId },
+          data: { logs: logs as any },
+        }).catch(() => {});
+      }
+    };
+
+    try {
+      const generator = workflowExecutorV2.execute(
+        plan,
+        organizationId,
+        scopeId,
+        'system',
+      );
+
+      let lastError: string | null = null;
+
+      for await (const event of generator) {
+        const timestamp = new Date().toISOString();
+
+        if (event.type === 'error') {
+          lastError = event.message || 'Unknown error';
+          addLog({ type: 'error', content: lastError, timestamp });
+          console.error(`[SCHEDULE] Event error for ${scheduleId}: ${event.message}`);
+        } else if (event.type === 'step_start') {
+          addLog({ type: 'step_start', taskId: event.taskId, taskTitle: event.taskTitle, timestamp });
+          console.log(`[SCHEDULE] step_start: task=${event.taskId} title="${event.taskTitle || ''}"`);
+        } else if (event.type === 'step_complete') {
+          addLog({ type: 'step_complete', taskId: event.taskId, taskTitle: event.taskTitle, timestamp });
+          console.log(`[SCHEDULE] step_complete: task=${event.taskId} title="${event.taskTitle || ''}"`);
+        } else if (event.type === 'step_failed') {
+          addLog({ type: 'step_failed', taskId: event.taskId, taskTitle: event.taskTitle, content: event.message, timestamp });
+          console.log(`[SCHEDULE] step_failed: task=${event.taskId} title="${event.taskTitle || ''}"`);
+        } else if (event.type === 'done') {
+          addLog({ type: 'done', timestamp });
+          console.log(`[SCHEDULE] Execution done for schedule=${scheduleId}`);
+        } else if (event.type === 'log') {
+          const content = typeof event.content === 'string' ? event.content : JSON.stringify(event.content);
+          addLog({ type: 'log', content: content?.slice(0, 2000), timestamp });
+        }
+      }
+
+      console.log(`[SCHEDULE] Generator drained for schedule=${scheduleId}, total events=${logs.length}`);
+
+      if (lastError) {
+        await prisma.schedule_execution_records.update({
+          where: { id: recordId },
+          data: { status: 'failed', error_message: lastError, completed_at: new Date(), logs: logs as any },
+        });
+        await prisma.workflow_schedules.update({
+          where: { id: scheduleId },
+          data: { failure_count: { increment: 1 } },
+        });
+      } else {
+        await prisma.schedule_execution_records.update({
+          where: { id: recordId },
+          data: { status: 'completed', completed_at: new Date(), logs: logs as any },
+        });
+      }
+    } catch (error: any) {
+      console.error(`[SCHEDULE] V2 execution threw for schedule=${scheduleId}:`, error.message, error.stack);
+      logs.push({ type: 'error', content: error.message || 'V2 execution failed', timestamp: new Date().toISOString() });
+
+      await prisma.schedule_execution_records.update({
+        where: { id: recordId },
+        data: {
+          status: 'failed',
+          error_message: error.message || 'V2 execution failed',
+          completed_at: new Date(),
+          logs: logs as any,
+        },
+      });
+
+      await prisma.workflow_schedules.update({
+        where: { id: scheduleId },
+        data: { failure_count: { increment: 1 } },
+      });
+    }
   }
 
   /**
@@ -377,29 +503,38 @@ class ScheduleService {
       },
     });
 
-    try {
-      // Start execution
-      const executionId = await workflowExecutionService.initializeWorkflowExecution(
-        {
-          id: 'system',
-          organizationId: schedule.organization_id,
-        },
-        schedule.workflow_id,
-        {
-          canvasData: {
-            nodes: workflow.nodes as any[],
-            edges: workflow.connections as any[],
-          },
-          variables: schedule.variables as any[],
-          triggerType: 'schedule',
-          triggerId: schedule.id,
-        }
-      );
-
-      // Update record
+    const scopeId = (workflow as any).business_scope_id;
+    if (!scopeId) {
       await prisma.schedule_execution_records.update({
         where: { id: record.id },
-        data: { execution_id: executionId },
+        data: { status: 'failed', error_message: 'Workflow has no business scope', completed_at: new Date() },
+      });
+      throw new Error('Workflow has no business scope assigned');
+    }
+
+    try {
+      // Build V2 plan (same as the manual Run button)
+      const plan = buildV2Plan(workflow, schedule.variables as any[]);
+
+      // Execute using V2 executor
+      const generator = workflowExecutorV2.execute(
+        plan,
+        schedule.organization_id,
+        scopeId,
+        'system',
+      );
+
+      // Drain the generator to completion
+      for await (const event of generator) {
+        if (event.type === 'error') {
+          console.error(`[SCHEDULE] Execution error for ${schedule.id}: ${event.message}`);
+        }
+      }
+
+      // Mark record as completed
+      await prisma.schedule_execution_records.update({
+        where: { id: record.id },
+        data: { status: 'completed', completed_at: new Date() },
       });
 
       // Calculate next run time
@@ -426,6 +561,12 @@ class ScheduleService {
           error_message: error.message,
           completed_at: new Date(),
         },
+      });
+
+      // Increment failure count
+      await prisma.workflow_schedules.update({
+        where: { id: schedule.id },
+        data: { failure_count: { increment: 1 } },
       });
 
       throw error;
@@ -517,6 +658,7 @@ class ScheduleService {
       status: record.status,
       errorMessage: record.error_message,
       retryCount: record.retry_count,
+      logs: record.logs || [],
     };
   }
 }

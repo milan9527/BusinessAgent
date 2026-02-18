@@ -736,4 +736,71 @@ export async function organizationRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(204).send();
     }
   );
+
+  /**
+   * POST /api/organizations/members/provision
+   * Admin-only: create a Cognito user with a generated password (no email required).
+   * The user is immediately verified and can sign in.
+   */
+  fastify.post<{ Body: { username: string; password: string; role: string } }>(
+    '/members/provision',
+    {
+      preHandler: [authenticate, requireRole('owner', 'admin')],
+      schema: {
+        description: 'Provision a new user with username/password (no email verification)',
+        tags: ['Memberships'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['username', 'password', 'role'],
+          properties: {
+            username: { type: 'string', minLength: 3 },
+            password: { type: 'string', minLength: 8 },
+            role: { type: 'string', enum: ['admin', 'member', 'viewer'] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { username, password, role } = request.body;
+      const { adminCreateUser, adminDeleteUser } = await import('../services/cognito-admin.service.js');
+      const { prisma } = await import('../config/database.js');
+
+      // 1. Create Cognito user (pre-verified, permanent password)
+      const { sub } = await adminCreateUser(username, password, request.user!.orgId, role);
+
+      try {
+        // 2. Create profile in DB
+        await prisma.profiles.create({
+          data: {
+            id: sub,
+            username,
+            full_name: username,
+          },
+        });
+
+        // 3. Create membership
+        const membership = await prisma.memberships.create({
+          data: {
+            user_id: sub,
+            organization_id: request.user!.orgId,
+            role,
+            status: 'active',
+            invited_email: username,
+          },
+        });
+
+        return reply.status(201).send({
+          userId: sub,
+          username,
+          role,
+          membershipId: membership.id,
+        });
+      } catch (err) {
+        // Rollback Cognito user if DB write fails
+        await adminDeleteUser(username).catch(() => {});
+        throw err;
+      }
+    }
+  );
 }

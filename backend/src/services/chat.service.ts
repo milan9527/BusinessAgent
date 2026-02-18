@@ -320,6 +320,7 @@ export class ChatService {
     let workspacePath: string | undefined;
     let subAgentNames: string[] = [];
     let subAgentNameToId: Map<string, string> = new Map();
+    let subAgentInfoMap: Map<string, { displayName: string; avatar: string | null }> = new Map();
     let pluginPaths: string[] = [];
     let mcpServers: Record<string, import('./claude-agent.service.js').MCPServerSDKConfig> = {};
 
@@ -335,6 +336,7 @@ export class ChatService {
       workspacePath = result.workspacePath;
       subAgentNames = result.subAgentNames;
       subAgentNameToId = result.subAgentNameToId;
+      subAgentInfoMap = result.subAgentInfoMap;
       pluginPaths = result.pluginPaths;
       mcpServers = result.mcpServers;
     } else {
@@ -435,6 +437,12 @@ export class ChatService {
       registrySub.emitter.on('event', onExternalEvent);
     }
 
+    // Track active sub-agent for speaker identity annotation.
+    // When a Task tool_use is seen, record the sub-agent info keyed by tool_use_id.
+    // When the matching tool_result arrives, clear the current speaker.
+    const activeSubAgentByToolId = new Map<string, { displayName: string; avatar: string | null }>();
+    let currentSpeaker: { displayName: string; avatar: string | null } | null = null;
+
     try {
       const conversationGenerator = this.claudeAgentService.runConversation(
         {
@@ -470,6 +478,32 @@ export class ChatService {
 
           if (event.type === 'assistant' && event.content) {
             allContentBlocks.push(...event.content);
+
+            // Detect sub-agent speaker changes from content blocks
+            for (const block of event.content) {
+              if (block.type === 'tool_use' && block.name === 'Task') {
+                const input = block.input as Record<string, unknown>;
+                const subAgentName = (input.subagent_type ?? input.agent) as string | undefined;
+                if (typeof subAgentName === 'string') {
+                  const info = subAgentInfoMap.get(subAgentName);
+                  if (info) {
+                    activeSubAgentByToolId.set(block.id, info);
+                    currentSpeaker = info;
+                  }
+                }
+              } else if (block.type === 'tool_result') {
+                if (activeSubAgentByToolId.has(block.tool_use_id)) {
+                  activeSubAgentByToolId.delete(block.tool_use_id);
+                  if (activeSubAgentByToolId.size === 0) currentSpeaker = null;
+                }
+              }
+            }
+
+            // Annotate event with current speaker if a sub-agent is active
+            if (currentSpeaker) {
+              event.speakerAgentName = currentSpeaker.displayName;
+              event.speakerAgentAvatar = currentSpeaker.avatar;
+            }
           }
 
           // Record event in Langfuse trace
@@ -567,7 +601,7 @@ export class ChatService {
     organizationId: string,
     userId: string,
     options: ChatStreamOptions,
-  ): Promise<{ sessionId: string; workspacePath: string; agentConfig: AgentConfig; skills: SkillForWorkspace[]; claudeSessionId?: string; subAgentNames: string[]; subAgentNameToId: Map<string, string>; pluginPaths: string[]; mcpServers: Record<string, import('./claude-agent.service.js').MCPServerSDKConfig> }> {
+  ): Promise<{ sessionId: string; workspacePath: string; agentConfig: AgentConfig; skills: SkillForWorkspace[]; claudeSessionId?: string; subAgentNames: string[]; subAgentNameToId: Map<string, string>; subAgentInfoMap: Map<string, { displayName: string; avatar: string | null }>; pluginPaths: string[]; mcpServers: Record<string, import('./claude-agent.service.js').MCPServerSDKConfig> }> {
     const scopeId = options.businessScopeId!;
 
     // Load scope
@@ -724,7 +758,17 @@ export class ChatService {
       mcpServerIds: [],
     };
 
-    return { sessionId, workspacePath, agentConfig, skills, claudeSessionId: session.claude_session_id ?? undefined, subAgentNames: agentsWithSkills.map(a => a.name), subAgentNameToId: new Map(agentsWithSkills.map(a => [a.name, a.id])), pluginPaths, mcpServers: await this.readSessionMcpServers(workspacePath) };
+    const subAgentInfoMap = new Map(agentsWithSkills.map(a => {
+      // Resolve avatar S3 key to a full API URL so the frontend can load it directly
+      let avatarUrl: string | null = null;
+      if (a.avatar) {
+        // Strip any leading slashes and build the API path
+        const key = a.avatar.replace(/^\/+/, '');
+        avatarUrl = `/api/avatars/${key}`;
+      }
+      return [a.name, { displayName: a.display_name || a.name, avatar: avatarUrl }];
+    }));
+    return { sessionId, workspacePath, agentConfig, skills, claudeSessionId: session.claude_session_id ?? undefined, subAgentNames: agentsWithSkills.map(a => a.name), subAgentNameToId: new Map(agentsWithSkills.map(a => [a.name, a.id])), subAgentInfoMap, pluginPaths, mcpServers: await this.readSessionMcpServers(workspacePath) };
   }
 
   /**
@@ -874,7 +918,7 @@ export class ChatService {
           break;
         case 'assistant':
           reply.raw.write(formatSSEEvent({
-            data: JSON.stringify({ type: 'assistant', content: safe.content, model: safe.model }),
+            data: JSON.stringify({ type: 'assistant', content: safe.content, model: safe.model, speakerAgentName: safe.speakerAgentName, speakerAgentAvatar: safe.speakerAgentAvatar }),
           }));
           break;
         case 'result':

@@ -83,6 +83,9 @@ export interface Message {
   type: 'user' | 'ai'
   content: string
   timestamp: Date
+  /** Sub-agent speaker identity — set when the message originates from a sub-agent */
+  speakerAgentName?: string
+  speakerAgentAvatar?: string | null
 }
 
 export interface ContextMemory {

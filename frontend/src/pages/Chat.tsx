@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useContext, useMemo } from 'react'
-import { Send, ChevronDown, AlertCircle, X, Bot, Layers, MessageSquare, File as FileIcon, Save, Eye, Pencil, Square, Paperclip, Upload, Trash2, Globe, Rocket, RefreshCw, ExternalLink, Brain } from 'lucide-react'
+import { Send, ChevronDown, AlertCircle, X, Bot, Layers, MessageSquare, File as FileIcon, Save, Eye, Pencil, Square, Paperclip, Upload, Trash2, Globe, Rocket, RefreshCw, ExternalLink, Brain, Download } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
@@ -198,6 +198,24 @@ function FileViewerTab({ path, sessionId }: { path: string; sessionId: string })
     }
   }, [handleSave])
 
+  const handleDownload = useCallback(() => {
+    const fileName = path.split('/').pop() ?? 'file'
+    if (isImage && imageUrl) {
+      const a = document.createElement('a')
+      a.href = imageUrl
+      a.download = fileName
+      a.click()
+    } else if (content !== null) {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+  }, [path, isImage, imageUrl, content])
+
   if (loading) {
     return <div className="flex-1 flex items-center justify-center text-gray-500">Loading...</div>
   }
@@ -205,12 +223,24 @@ function FileViewerTab({ path, sessionId }: { path: string; sessionId: string })
   // Image files — render as image, no edit/preview toolbar
   if (isImage) {
     return (
-      <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-gray-950">
-        {imageUrl ? (
-          <img src={imageUrl} alt={path} className="max-w-full max-h-full object-contain rounded" />
-        ) : (
-          <span className="text-gray-500">Failed to load image</span>
-        )}
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-950">
+        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-gray-800 bg-gray-900/60 text-xs">
+          <div className="flex-1" />
+          <button
+            onClick={handleDownload}
+            disabled={!imageUrl}
+            className="flex items-center gap-1 px-2 py-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors disabled:opacity-40"
+          >
+            <Download className="w-3 h-3" /> Download
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+          {imageUrl ? (
+            <img src={imageUrl} alt={path} className="max-w-full max-h-full object-contain rounded" />
+          ) : (
+            <span className="text-gray-500">Failed to load image</span>
+          )}
+        </div>
       </div>
     )
   }
@@ -240,6 +270,13 @@ function FileViewerTab({ path, sessionId }: { path: string; sessionId: string })
           </button>
         )}
         <div className="flex-1" />
+        <button
+          onClick={handleDownload}
+          disabled={content === null}
+          className="flex items-center gap-1 px-2 py-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors disabled:opacity-40"
+        >
+          <Download className="w-3 h-3" /> Download
+        </button>
         {mode === 'edit' && (
           <button
             onClick={handleSave}

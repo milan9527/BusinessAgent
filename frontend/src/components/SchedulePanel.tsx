@@ -2,7 +2,7 @@
  * SchedulePanel - Manage schedules for a workflow
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   X, 
   Plus, 
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useSchedules } from '@/services/useSchedules';
 import type { Schedule, ScheduleRecord } from '@/services/useSchedules';
+import type { ScheduleExecutionLog } from '@/services/api/restScheduleService';
 
 interface SchedulePanelProps {
   workflowId: string;
@@ -56,6 +57,7 @@ export function SchedulePanel({ workflowId, onClose }: SchedulePanelProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewingRecord, setViewingRecord] = useState<ScheduleRecord | null>(null);
 
   // Create form state
   const [newName, setNewName] = useState('');
@@ -65,6 +67,43 @@ export function SchedulePanel({ workflowId, onClose }: SchedulePanelProps) {
   useEffect(() => {
     loadSchedules(workflowId);
   }, [workflowId, loadSchedules]);
+
+  // Poll execution records while any are in 'running' status
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const refreshRecords = useCallback(async () => {
+    if (!selectedSchedule) return;
+    const result = await getExecutionRecords(selectedSchedule.id);
+    if (result) {
+      setExecutionRecords(result.records);
+      // Update the viewed record if modal is open
+      if (viewingRecord) {
+        const updated = result.records.find(r => r.id === viewingRecord.id);
+        if (updated) setViewingRecord(updated);
+      }
+      // Stop polling if no records are running
+      const hasRunning = result.records.some(r => r.status === 'running');
+      if (!hasRunning && pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+        // Also refresh schedule stats (run count, last run)
+        loadSchedules(workflowId);
+      }
+    }
+  }, [selectedSchedule, viewingRecord, getExecutionRecords, loadSchedules, workflowId]);
+
+  useEffect(() => {
+    const hasRunning = executionRecords.some(r => r.status === 'running');
+    if (hasRunning && selectedSchedule && !pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(refreshRecords, 5000);
+    }
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [executionRecords, selectedSchedule, refreshRecords]);
 
   const handleCreate = async () => {
     if (!newName.trim() || !newCron.trim()) return;
@@ -102,7 +141,16 @@ export function SchedulePanel({ workflowId, onClose }: SchedulePanelProps) {
   const handleTrigger = async (schedule: Schedule) => {
     const result = await triggerSchedule(schedule.id);
     if (result) {
-      alert(`Triggered! Execution ID: ${result.executionId}`);
+      // Auto-show execution history after triggering
+      setSelectedSchedule(schedule);
+      setIsLoadingRecords(true);
+      const records = await getExecutionRecords(schedule.id);
+      if (records) {
+        setExecutionRecords(records.records);
+      }
+      setIsLoadingRecords(false);
+      // Reload schedules to update run count
+      loadSchedules(workflowId);
     }
   };
 
@@ -381,9 +429,20 @@ export function SchedulePanel({ workflowId, onClose }: SchedulePanelProps) {
       {/* Execution Records */}
       {selectedSchedule && (
         <div className="border-t border-gray-800 p-4 max-h-64 overflow-y-auto">
-          <h4 className="text-xs font-medium text-gray-400 mb-2">
-            Execution History - {selectedSchedule.name}
-          </h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-medium text-gray-400">
+              Execution History - {selectedSchedule.name}
+            </h4>
+            <button
+              onClick={() => handleViewRecords(selectedSchedule)}
+              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+            >
+              {executionRecords.some(r => r.status === 'running') && (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              )}
+              Refresh
+            </button>
+          </div>
           {isLoadingRecords ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
@@ -392,38 +451,181 @@ export function SchedulePanel({ workflowId, onClose }: SchedulePanelProps) {
             <p className="text-xs text-gray-500 text-center py-4">No executions yet</p>
           ) : (
             <div className="space-y-2">
-              {executionRecords.map((record) => (
-                <div
-                  key={record.id}
-                  className="p-2 bg-gray-800/50 rounded text-xs"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-gray-400">
-                      {new Date(record.scheduledAt).toLocaleString()}
-                    </span>
-                    <span className={`px-1.5 py-0.5 rounded ${
-                      record.status === 'completed'
-                        ? 'bg-green-500/20 text-green-400'
-                        : record.status === 'failed'
-                        ? 'bg-red-500/20 text-red-400'
-                        : record.status === 'running'
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {record.status}
-                    </span>
-                  </div>
-                  {record.errorMessage && (
-                    <div className="text-red-400 mt-1 truncate">
-                      {record.errorMessage}
+              {executionRecords.map((record) => {
+                const duration = record.completedAt && record.triggeredAt
+                  ? Math.round((new Date(record.completedAt).getTime() - new Date(record.triggeredAt).getTime()) / 1000)
+                  : record.triggeredAt && record.status === 'running'
+                  ? Math.round((Date.now() - new Date(record.triggeredAt).getTime()) / 1000)
+                  : null;
+
+                return (
+                  <div
+                    key={record.id}
+                    className="p-2 bg-gray-800/50 rounded text-xs cursor-pointer hover:bg-gray-700/50 transition-colors"
+                    onClick={() => setViewingRecord(record)}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-gray-400">
+                        {new Date(record.scheduledAt).toLocaleString()}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                        record.status === 'completed'
+                          ? 'bg-green-500/20 text-green-400'
+                          : record.status === 'failed'
+                          ? 'bg-red-500/20 text-red-400'
+                          : record.status === 'running'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {record.status === 'running' && (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        )}
+                        {record.status}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {duration !== null && (
+                      <div className="text-gray-500 mt-1">
+                        {record.status === 'running' ? 'Running for' : 'Duration'}: {duration >= 60 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : `${duration}s`}
+                      </div>
+                    )}
+                    {record.errorMessage && (
+                      <div className="text-red-400 mt-1 break-words">
+                        {record.errorMessage}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       )}
+      {/* Execution Log Modal */}
+      {viewingRecord && (
+        <ExecutionLogModal
+          record={viewingRecord}
+          onClose={() => setViewingRecord(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Modal showing execution logs in a chat-like format
+ */
+function ExecutionLogModal({ record, onClose }: { record: ScheduleRecord; onClose: () => void }) {
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logs = (record.logs || []) as ScheduleExecutionLog[];
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs.length]);
+
+  const formatTime = (ts: string) => {
+    return new Date(ts).toLocaleTimeString();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl max-h-[80vh] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium text-white">Execution Log</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {new Date(record.scheduledAt).toLocaleString()} · <span className={
+                record.status === 'completed' ? 'text-green-400'
+                : record.status === 'failed' ? 'text-red-400'
+                : record.status === 'running' ? 'text-blue-400'
+                : 'text-gray-400'
+              }>{record.status}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors">
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        {/* Log Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px]">
+          {logs.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+              {record.status === 'running' ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Waiting for events...
+                </div>
+              ) : (
+                'No log events recorded'
+              )}
+            </div>
+          ) : (
+            logs.map((log, i) => (
+              <div key={i} className="flex gap-3">
+                {/* Icon */}
+                <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5 ${
+                  log.type === 'step_start' ? 'bg-blue-500/20 text-blue-400'
+                  : log.type === 'step_complete' ? 'bg-green-500/20 text-green-400'
+                  : log.type === 'step_failed' ? 'bg-red-500/20 text-red-400'
+                  : log.type === 'error' ? 'bg-red-500/20 text-red-400'
+                  : log.type === 'done' ? 'bg-green-500/20 text-green-400'
+                  : 'bg-gray-500/20 text-gray-400'
+                }`}>
+                  {log.type === 'step_start' && <Play className="w-3 h-3" />}
+                  {log.type === 'step_complete' && <Check className="w-3 h-3" />}
+                  {log.type === 'step_failed' && <AlertCircle className="w-3 h-3" />}
+                  {log.type === 'error' && <AlertCircle className="w-3 h-3" />}
+                  {log.type === 'done' && <Check className="w-3 h-3" />}
+                  {log.type === 'log' && <Clock className="w-3 h-3" />}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-xs font-medium ${
+                      log.type === 'step_start' ? 'text-blue-400'
+                      : log.type === 'step_complete' ? 'text-green-400'
+                      : log.type === 'step_failed' || log.type === 'error' ? 'text-red-400'
+                      : log.type === 'done' ? 'text-green-400'
+                      : 'text-gray-300'
+                    }`}>
+                      {log.type === 'step_start' && `▶ Starting: ${log.taskTitle || log.taskId || 'task'}`}
+                      {log.type === 'step_complete' && `✓ Completed: ${log.taskTitle || log.taskId || 'task'}`}
+                      {log.type === 'step_failed' && `✗ Failed: ${log.taskTitle || log.taskId || 'task'}`}
+                      {log.type === 'error' && 'Error'}
+                      {log.type === 'done' && '✓ Workflow completed'}
+                      {log.type === 'log' && 'Agent'}
+                    </span>
+                    <span className="text-xs text-gray-600">{formatTime(log.timestamp)}</span>
+                  </div>
+                  {log.content && (
+                    <div className={`text-xs leading-relaxed whitespace-pre-wrap break-words ${
+                      log.type === 'error' || log.type === 'step_failed'
+                        ? 'text-red-300 bg-red-500/10 p-2 rounded'
+                        : 'text-gray-300 bg-gray-800/50 p-2 rounded'
+                    }`}>
+                      {log.content}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={logsEndRef} />
+        </div>
+
+        {/* Footer */}
+        {record.status === 'running' && (
+          <div className="p-3 border-t border-gray-800 flex items-center gap-2 text-xs text-blue-400">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Execution in progress — logs update automatically
+          </div>
+        )}
+      </div>
     </div>
   );
 }

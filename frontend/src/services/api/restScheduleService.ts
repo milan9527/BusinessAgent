@@ -26,6 +26,14 @@ export interface Schedule {
   createdAt: string;
 }
 
+export interface ScheduleExecutionLog {
+  type: 'step_start' | 'step_complete' | 'step_failed' | 'log' | 'error' | 'done';
+  content?: string;
+  taskId?: string;
+  taskTitle?: string;
+  timestamp: string;
+}
+
 export interface ScheduleRecord {
   id: string;
   executionId: string | null;
@@ -35,6 +43,7 @@ export interface ScheduleRecord {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   errorMessage: string | null;
   retryCount: number;
+  logs: ScheduleExecutionLog[];
 }
 
 export interface CreateScheduleRequest {

@@ -73,7 +73,12 @@ function AIBubble({ message, isStreaming }: { message: Message; isStreaming?: bo
       {contentBlocks ? (
         // Rich rendering with content blocks (text, tool_use, tool_result)
         <div className="max-w-[85%]">
-          <ChatMessage content={contentBlocks} isStreaming={isStreaming} />
+          <ChatMessage
+            content={contentBlocks}
+            isStreaming={isStreaming}
+            speakerAgentName={message.speakerAgentName}
+            speakerAgentAvatar={message.speakerAgentAvatar}
+          />
         </div>
       ) : (
         // Fallback: plain text rendering
