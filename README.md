@@ -462,7 +462,12 @@ npx cdk deploy                 # Deploys full stack: VPC, Aurora, Redis, ECS, Cl
 
 ## Architecture Diagram
 
-See [architecture.drawio](./architecture-v2.drawio) — open with [draw.io](https://app.diagrams.net/) or VS Code draw.io extension.
+See [architecture.drawio](./docs/architecture-v2.drawio) — open with [draw.io](https://app.diagrams.net/) or VS Code draw.io extension.
 
-![Architecture](./architecture.drawio.png)
+![Architecture](./docs/architecture.drawio.png)
+
+## Example
+
+See [case examples](docs/GLOBAL_MARKETER_TEST_SCENARIOS.md) .
+
 
