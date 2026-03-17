@@ -125,6 +125,26 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   }
 
   try {
+    // Development bypass: accept "dev" token in development mode
+    if (token === 'dev' && config.isDevelopment) {
+      // Look up the first profile in the database
+      const profile = await prisma.profiles.findFirst();
+      if (profile) {
+        const membership = await prisma.memberships.findFirst({
+          where: { user_id: profile.id },
+        });
+        const user: User = {
+          id: profile.id,
+          email: profile.username || 'dev@example.com',
+          orgId: membership?.organization_id ?? '',
+          role: (membership?.role as UserRole) ?? 'owner',
+        };
+        request.user = user;
+        request.log.info({ userId: user.id }, 'Dev token bypass — authenticated as dev user');
+        return;
+      }
+    }
+
     // Try internal service token first (for agent subprocess calls)
     const internalPayload = verifyInternalToken(token);
     if (internalPayload) {

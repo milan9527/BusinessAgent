@@ -25,6 +25,7 @@ export function Login() {
     await redirectToLogin();
   };
 
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -47,6 +48,7 @@ export function Login() {
           >
             Sign In with SSO
           </button>
+
 
           <p className="mt-4 text-center text-xs text-slate-500">
             Powered by Amazon Cognito

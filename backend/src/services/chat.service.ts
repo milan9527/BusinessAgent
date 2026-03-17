@@ -744,9 +744,11 @@ export class ChatService {
     const workspacePath = this.workspaceManager.getSessionWorkspacePath(organizationId, scopeId, sessionId);
 
     // Build agent config — use selected agent's prompt or scope-level
+    // When no agent is explicitly selected, default to the first agent in the scope
+    // so that AgentCore Runtime routing works (it needs a real agent name).
     const selectedAgent = selectedAgentId
       ? agentsWithSkills.find(a => a.id === selectedAgentId)
-      : null;
+      : (agentsWithSkills.length > 0 ? agentsWithSkills[0] : null);
 
     const agentConfig: AgentConfig = {
       id: selectedAgent?.id ?? scopeId,

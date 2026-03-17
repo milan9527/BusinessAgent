@@ -3,3 +3,6 @@
 .kiro/skills
 super-agent-workspaces/
 docs/
+.snapshots/
+.vscode/
+backend/agentcore-deploy/__pycache__/

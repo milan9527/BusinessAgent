@@ -1,0 +1,38 @@
+{
+  "player_analyst": {
+    "agent_id": "player_analyst-yaz5F1BaEi",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/player_analyst-yaz5F1BaEi"
+  },
+  "event_planner": {
+    "agent_id": "event_planner-t3oxZA2DVy",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/event_planner-t3oxZA2DVy"
+  },
+  "content_localizer": {
+    "agent_id": "content_localizer-qQxh2MGjtJ",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/content_localizer-qQxh2MGjtJ"
+  },
+  "ad_optimizer": {
+    "agent_id": "ad_optimizer-whpTtaBZo7",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/ad_optimizer-whpTtaBZo7"
+  },
+  "site_generator": {
+    "agent_id": "site_generator-5e0StgGpRP",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/site_generator-5e0StgGpRP"
+  },
+  "seo_optimizer": {
+    "agent_id": "seo_optimizer-p7jsID8NAH",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/seo_optimizer-p7jsID8NAH"
+  },
+  "hr_assistant": {
+    "agent_id": "hr_assistant-VW5stZDUUX",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/hr_assistant-VW5stZDUUX"
+  },
+  "it_support": {
+    "agent_id": "it_support-ao3hsr9JAM",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/it_support-ao3hsr9JAM"
+  },
+  "global_marketer": {
+    "agent_id": "global_marketer-vQgvfKBTfW",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/global_marketer-vQgvfKBTfW"
+  }
+}

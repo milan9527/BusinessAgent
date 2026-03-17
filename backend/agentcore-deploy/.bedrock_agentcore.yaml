@@ -1,0 +1,524 @@
+default_agent: global_marketer
+agents:
+  ad_optimizer:
+    name: ad_optimizer
+    entrypoint: agent_ad_optimizer.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-ad_optimizer
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: ad_optimizer-whpTtaBZo7
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/ad_optimizer-whpTtaBZo7
+      agent_session_id: a3d47b0d-9c62-4337-ba68-4f48380e67bd
+    codebuild:
+      project_name: bedrock-agentcore-ad_optimizer-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-bad17e505f
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: ad_optimizer_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  content_localizer:
+    name: content_localizer
+    entrypoint: agent_content_localizer.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-content_localizer
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: content_localizer-qQxh2MGjtJ
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/content_localizer-qQxh2MGjtJ
+      agent_session_id: 84fd4fde-105c-443a-a95f-b264ac52c3ec
+    codebuild:
+      project_name: bedrock-agentcore-content_localizer-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-58798eeae5
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: content_localizer_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  event_planner:
+    name: event_planner
+    entrypoint: agent_event_planner.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-event_planner
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: event_planner-t3oxZA2DVy
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/event_planner-t3oxZA2DVy
+      agent_session_id: 5b8ac81d-7e83-4705-a1a6-74c5e7a1c6bb
+    codebuild:
+      project_name: bedrock-agentcore-event_planner-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-7ca4bcf4d9
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: event_planner_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  hr_assistant:
+    name: hr_assistant
+    entrypoint: agent_hr_assistant.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-hr_assistant
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: hr_assistant-VW5stZDUUX
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/hr_assistant-VW5stZDUUX
+      agent_session_id: e8605da4-d450-41fe-891e-402ad47ef786
+    codebuild:
+      project_name: bedrock-agentcore-hr_assistant-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-004b829d63
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: hr_assistant_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  it_support:
+    name: it_support
+    entrypoint: agent_it_support.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-it_support
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: it_support-ao3hsr9JAM
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/it_support-ao3hsr9JAM
+      agent_session_id: 715ae854-0889-4623-a961-56dd9816edcf
+    codebuild:
+      project_name: bedrock-agentcore-it_support-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-08de9c14bd
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: it_support_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  player_analyst:
+    name: player_analyst
+    entrypoint: agent_player_analyst.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-player_analyst
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: player_analyst-yaz5F1BaEi
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/player_analyst-yaz5F1BaEi
+      agent_session_id: d8d26d1b-0e88-425a-9043-13384db710b2
+    codebuild:
+      project_name: bedrock-agentcore-player_analyst-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-41dcf3ba09
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: player_analyst_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  seo_optimizer:
+    name: seo_optimizer
+    entrypoint: agent_seo_optimizer.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-seo_optimizer
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: seo_optimizer-p7jsID8NAH
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/seo_optimizer-p7jsID8NAH
+      agent_session_id: 5d0c9c49-2b0b-4072-969c-2d4f85117c9a
+    codebuild:
+      project_name: bedrock-agentcore-seo_optimizer-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-0089c23e5e
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: seo_optimizer_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  site_generator:
+    name: site_generator
+    entrypoint: agent_site_generator.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-site_generator
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: site_generator-5e0StgGpRP
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/site_generator-5e0StgGpRP
+      agent_session_id: 171592ac-1715-41e8-9aec-293b42e2144a
+    codebuild:
+      project_name: bedrock-agentcore-site_generator-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-15a7d82094
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: site_generator_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  global_marketer:
+    name: global_marketer
+    entrypoint: agent_global_marketer.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: none
+    source_path: /Users/pingaws/Documents/Kiro/super-agent/backend/agentcore-deploy
+    aws:
+      execution_role: arn:aws:iam::632930644527:role/AgentCoreRuntimeRole
+      execution_role_auto_create: false
+      account: '632930644527'
+      region: us-east-1
+      ecr_repository: 632930644527.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-global_marketer
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: global_marketer-vQgvfKBTfW
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/global_marketer-vQgvfKBTfW
+      agent_session_id: 1d6aabf5-3d88-41a4-b854-0089ce5b13d9
+    codebuild:
+      project_name: bedrock-agentcore-global_marketer-builder
+      execution_role: arn:aws:iam::632930644527:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-349c0a2081
+      source_bucket: bedrock-agentcore-codebuild-sources-632930644527-us-east-1
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: global_marketer_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

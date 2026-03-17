@@ -154,7 +154,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         querystring: {
           type: 'object',
           properties: {
-            business_scope_id: { type: 'string', format: 'uuid' },
+            business_scope_id: { 
+              anyOf: [
+                { type: 'string', format: 'uuid' },
+                { type: 'string', maxLength: 0 }
+              ]
+            },
           },
         },
         response: {
@@ -209,7 +214,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
           type: 'object',
           required: ['id'],
           properties: {
-            id: { type: 'string', format: 'uuid' },
+            id: { type: 'string', minLength: 1 },
           },
         },
         response: {
@@ -260,7 +265,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         params: {
           type: 'object',
           required: ['id'],
-          properties: { id: { type: 'string', format: 'uuid' } },
+          properties: { id: { type: 'string', minLength: 1 } },
         },
         response: {
           200: {

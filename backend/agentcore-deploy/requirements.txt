@@ -1,0 +1,7 @@
+strands-agents[otel]
+bedrock-agentcore
+aws-opentelemetry-distro>=0.10.0
+boto3
+strands-agents-tools>=0.2.22
+playwright
+nest-asyncio
